@@ -2,23 +2,15 @@
 //!
 //! This module provides the Tauri command handlers for Stream Deck operations.
 //! These commands are invoked from the TypeScript frontend via `invoke()`.
-//!
-//! # Architecture Notes
-//!
-//! In a full implementation, you would:
-//! 1. Store the connected StreamDeck in Tauri's managed state
-//! 2. Use a background thread/task for continuous button polling
-//! 3. Emit events to the frontend when button states change
 
-use tauri::Manager;
-use serde_json::json;
-use crate::audio;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tauri::Emitter;
+
+use serde_json::json;
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::actions::ActionRegistry;
 use crate::hid::device::{DeviceInfo, StreamDeck};
-use tauri::{AppHandle, State};
 use crate::AppState;
 
 /// List all connected Stream Deck devices.
@@ -44,28 +36,23 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>, String> {
 /// ```typescript
 /// await invoke('connect_device', { devicePath: '/dev/hidraw0' });
 /// ```
-///
-/// # TODO
-///
-/// - Store the connection in Tauri's managed state
-/// - Start a background task to poll for button changes
-/// - Emit "streamdeck://button-state" events when buttons change
 #[tauri::command]
-pub fn connect_device(device_path: String, state: State<'_, AppState>, appHandle: AppHandle) -> Result<(), String> {
+pub fn connect_device(device_path: String, state: State<'_, AppState>, app_handle: AppHandle) -> Result<(), String> {
     let streamdeck = StreamDeck::connect(&device_path)?;
 
     //Lock the mutex, get mutable acces to the Option inside
     let mut guard = state.streamdeck.lock().unwrap(); 
     *guard = Some(streamdeck); //the *guard here is accessing the option within which is the streamdeck state
     
-    drop(guard); //release the lock before spawning thread
+    drop(guard); // Release the lock before spawning thread
 
-    //clone the handle for the thread
-    let handle = appHandle.clone();
+    // Clone the handle for the thread
+    let handle = app_handle.clone();
 
     thread::spawn(move || {
         polling_loop(handle);
     });
+
     Ok(())
 }
 
@@ -113,45 +100,65 @@ pub fn get_button_state(state: State<'_, AppState>) -> Result<Vec<bool>, String>
 }
 
 fn polling_loop(app_handle: AppHandle) {
-      let mut prev_states = [false; 15];
+    let mut prev_states = [false; 15];
 
-      loop {
-          // Get access to state through the app handle
-          let state = app_handle.state::<AppState>();
-          let mut guard = state.streamdeck.lock().unwrap();
+    loop {
+        // Get access to state and registry through the app handle
+        let state = app_handle.state::<AppState>();
+        let registry = app_handle.state::<ActionRegistry>();
 
-          match &mut *guard {
-              Some(streamdeck) => {
-                  if let Ok(buttons) = streamdeck.read_buttons() {
-                      // Check for button 0 rising edge BEFORE updating prev_states
-                      if buttons[0] && !prev_states[0] {
-                          println!("Button 0 pressed - Volume Up!");
-                          if let Err(e) = audio::volume_up() {
-                              eprintln!("Volume error: {}", e);
-                          }
-                      }
+        let mut streamdeck_guard = state.streamdeck.lock().unwrap();
 
-                      // Check if anything changed, then update prev_states
-                      if buttons != &prev_states {
-                          prev_states = *buttons;
-                          println!("button states changed: {:?}", buttons);
+        match &mut *streamdeck_guard {
+            Some(streamdeck) => {
+                if let Ok(buttons) = streamdeck.read_buttons() {
+                    // Check each button for rising edge (just pressed)
+                    for i in 0..15 {
+                        if buttons[i] && !prev_states[i] {
+                            // Button i was just pressed - look up its action
+                            let config_guard = state.config.lock().unwrap();
 
-                          // Emit event to frontend
-                          let _ = app_handle.emit("streamdeck://button-state", json!({
-                              "buttons": buttons.to_vec()
-                          }));
-                      }
-                  }
-              }
-              None => {
-                  // Device disconnected, exit the loop
-                  break;
-              }
-          }
+                            if let Some(page) = config_guard.pages.get(config_guard.current_page) {
+                                if let Some(button_config) = page.buttons.get(&i.to_string()) {
+                                    println!(
+                                        "Button {} pressed - executing: {}",
+                                        i, button_config.action.action_type
+                                    );
 
-          // Release lock before sleeping!
-          drop(guard);
+                                    // Clone the action so we can release the config lock
+                                    let action = button_config.action.clone();
+                                    drop(config_guard);
 
-          thread::sleep(Duration::from_millis(50));
-      }
-  }
+                                    // Execute the action via registry
+                                    if let Err(e) = registry.execute(&action, &app_handle) {
+                                        eprintln!("Action error: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Check if anything changed, then update prev_states and emit event
+                    if buttons != &prev_states {
+                        prev_states = *buttons;
+
+                        // Emit event to frontend
+                        let _ = app_handle.emit(
+                            "streamdeck://button-state",
+                            json!({ "buttons": buttons.to_vec() }),
+                        );
+                    }
+                }
+            }
+            None => {
+                // Device disconnected, exit the loop
+                break;
+            }
+        }
+
+        // Release lock before sleeping!
+        drop(streamdeck_guard);
+
+        thread::sleep(Duration::from_millis(50));
+    }
+}

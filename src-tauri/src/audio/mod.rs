@@ -2,7 +2,7 @@
 //!
 //! Uses PowerShell to control system volume via simulated key presses.
 //! POWERSHELL IS JUST A TEMP SOLUTION. THERE IS A BUG IN THE WINDOWS API FOR 
-//! .ACTIVATE() AND YOU CANNOT USE IT CURRENTLY FOR VOLUME CONTROL
+//! .ACTIVATE() AND YOU CANNOT USE IT CURRENTLY FOR VOLUME CONTROLCL
 
 use std::process::Command;
 

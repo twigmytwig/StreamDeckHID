@@ -2,16 +2,25 @@
 //!
 //! This module exports the Tauri application builder and all command handlers.
 //! The HID communication logic is organized into submodules.
-mod commands;
+
+mod actions;
 mod audio;
+mod commands;
+mod config;
 mod hid;
 
 use std::sync::Mutex;
+use crate::actions::ActionRegistry;
+use crate::config::Config;
 use crate::hid::device::StreamDeck;
 use commands::streamdeck::{connect_device, disconnect_device, get_button_state, list_devices};
 
-pub struct AppState{
+/// Application state shared across commands
+pub struct AppState {
+    /// Currently connected Stream Deck device
     pub streamdeck: Mutex<Option<StreamDeck>>,
+    /// Button/action configuration
+    pub config: Mutex<Config>,
 }
 
 /// Runs the Tauri application.
@@ -26,15 +35,13 @@ pub fn run() {
             disconnect_device,
             get_button_state,
         ])
-        // TODO: Add setup hook to initialize HID context and managed state
-        // .setup(|app| {
-        //     // Initialize the HID API context here
-        //     // Store it in app state for use by commands
-        //     Ok(())
-        // })
+        // Manage application state
         .manage(AppState {
             streamdeck: Mutex::new(None),
+            config: Mutex::new(Config::default()),
         })
+        // Manage action registry separately (it doesn't need a Mutex - it's read-only after init)
+        .manage(ActionRegistry::new())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
