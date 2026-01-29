@@ -150,7 +150,7 @@ impl StreamDeck {
     /// Disconnect from the Stream Deck.
     ///
     /// This consumes the StreamDeck instance and releases the HID connection.
-    /// The device handle is automatically closed when dropped.
+    /// The device handle is automatically closed when dropped, so this method is more so redundant.
     pub fn disconnect(self) {
         // The HidDevice is automatically closed when dropped
         drop(self);

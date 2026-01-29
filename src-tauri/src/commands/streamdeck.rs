@@ -11,6 +11,8 @@
 //! 3. Emit events to the frontend when button states change
 
 use crate::hid::device::{DeviceInfo, StreamDeck};
+use tauri::State;
+use crate::AppState;
 
 /// List all connected Stream Deck devices.
 ///
@@ -42,9 +44,12 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>, String> {
 /// - Start a background task to poll for button changes
 /// - Emit "streamdeck://button-state" events when buttons change
 #[tauri::command]
-pub fn connect_device(device_path: String) -> Result<(), String> {
-    // TODO: Store in managed state and start polling task
-    let _streamdeck = StreamDeck::connect(&device_path)?;
+pub fn connect_device(device_path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let streamdeck = StreamDeck::connect(&device_path)?;
+
+    //Lock the mutex, get mutable acces to the Option inside
+    let mut guard = state.streamdeck.lock().unwrap(); 
+    *guard = Some(streamdeck); //the *guard here is accessing the option within which is the streamdeck state
     Ok(())
 }
 
@@ -56,8 +61,9 @@ pub fn connect_device(device_path: String) -> Result<(), String> {
 /// await invoke('disconnect_device');
 /// ```
 #[tauri::command]
-pub fn disconnect_device() -> Result<(), String> {
-    // TODO: Stop polling task and close connection from managed state
+pub fn disconnect_device(state: State<'_, AppState>) -> Result<(), String> {
+    let mut guard = state.streamdeck.lock().unwrap();
+    *guard = None; //setting the option within (aka stream deck state) to none
     Ok(())
 }
 
@@ -74,7 +80,18 @@ pub fn disconnect_device() -> Result<(), String> {
 /// const states = await invoke<boolean[]>('get_button_state');
 /// ```
 #[tauri::command]
-pub fn get_button_state() -> Result<Vec<bool>, String> {
-    // TODO: Get from managed state
-    Ok(vec![false; 15])
+pub fn get_button_state(state: State<'_, AppState>) -> Result<Vec<bool>, String> {
+    let mut guard = state.streamdeck.lock().unwrap();
+
+    match &mut *guard {
+        Some(streamdeck) => {
+            //streamdeck is now a variable holding &mut of the option (StreamDeck)
+            let buttons = streamdeck.read_buttons()?;
+            Ok(buttons.to_vec())
+        }
+        None => {
+            //no device connected
+            Err("No device connected".to_string())
+        }
+    }
 }
