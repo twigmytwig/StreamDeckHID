@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use super::constants::{is_supported_device, BUTTON_COUNT, ELGATO_VENDOR_ID};
 
+/// Byte offset where button data starts in HID input report
+pub const BUTTON_DATA_OFFSET: usize = 4;
+
 /// Information about a discovered Stream Deck device.
 /// This is returned to the frontend when listing available devices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,14 +186,12 @@ impl StreamDeck {
         // Returns the number of bytes read, or 0 if no data available
         match self.device.read(&mut buf) {
             Ok(bytes_read) if bytes_read > 0 => {
-                // TODO: Parse the input report
+                // Parse the input report
                 // The button states are at specific offsets depending on the model
                 // For Stream Deck Original/MK.2, buttons start at byte 4 or 5
-                //
-                // Example parsing (actual offsets may vary):
-                // for i in 0..BUTTON_COUNT {
-                //     self.button_states[i] = buf[4 + i] != 0;
-                // }
+                for i in 0..BUTTON_COUNT {
+                    self.button_states[i] = buf[BUTTON_DATA_OFFSET + i] != 0;
+                }
                 let _ = bytes_read; // Acknowledge we received data
             }
             Ok(_) => {
