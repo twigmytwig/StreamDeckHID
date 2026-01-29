@@ -3,6 +3,7 @@
 //! This module exports the Tauri application builder and all command handlers.
 //! The HID communication logic is organized into submodules.
 mod commands;
+mod audio;
 mod hid;
 
 use std::sync::Mutex;

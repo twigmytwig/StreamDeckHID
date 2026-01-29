@@ -11,6 +11,8 @@
 //! 3. Emit events to the frontend when button states change
 
 use tauri::Manager;
+use serde_json::json;
+use crate::audio;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -121,12 +123,23 @@ fn polling_loop(app_handle: AppHandle) {
           match &mut *guard {
               Some(streamdeck) => {
                   if let Ok(buttons) = streamdeck.read_buttons() {
-                      // Check if anything changed
+                      // Check for button 0 rising edge BEFORE updating prev_states
+                      if buttons[0] && !prev_states[0] {
+                          println!("Button 0 pressed - Volume Up!");
+                          if let Err(e) = audio::volume_up() {
+                              eprintln!("Volume error: {}", e);
+                          }
+                      }
+
+                      // Check if anything changed, then update prev_states
                       if buttons != &prev_states {
                           prev_states = *buttons;
-                          println!("button states change: {:?}", buttons);
+                          println!("button states changed: {:?}", buttons);
+
                           // Emit event to frontend
-                          let _ = app_handle.emit("streamdeck://button-state", buttons.to_vec());  
+                          let _ = app_handle.emit("streamdeck://button-state", json!({
+                              "buttons": buttons.to_vec()
+                          }));
                       }
                   }
               }
