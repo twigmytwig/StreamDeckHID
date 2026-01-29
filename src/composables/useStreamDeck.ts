@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /**
@@ -33,6 +33,7 @@ export interface ButtonEvent {
  * - Discovering connected Stream Deck devices
  * - Connecting/disconnecting to a specific device
  * - Receiving real-time button press events
+ * - Fetching button images
  */
 export function useStreamDeck() {
   /** List of discovered Stream Deck devices */
@@ -43,6 +44,9 @@ export function useStreamDeck() {
 
   /** Current button states (15 booleans for 5x3 grid) */
   const buttonStates = ref<boolean[]>(new Array(15).fill(false));
+
+  /** Current button images (15 URLs or null for 5x3 grid) */
+  const buttonImages = ref<(string | null)[]>(new Array(15).fill(null));
 
   /** Unlisten function for cleaning up event listener */
   let unlistenFn: UnlistenFn | null = null;
@@ -64,6 +68,8 @@ export function useStreamDeck() {
     if (device) {
       connectedDevice.value = device;
     }
+    // Fetch button images after connecting
+    await fetchButtonImages();
   }
 
   /**
@@ -73,6 +79,21 @@ export function useStreamDeck() {
     await invoke("disconnect_device");
     connectedDevice.value = null;
     buttonStates.value = new Array(15).fill(false);
+    buttonImages.value = new Array(15).fill(null);
+  }
+
+  /**
+   * Fetch button images for the current page from the backend.
+   * Converts file paths to URLs the webview can display.
+   */
+  async function fetchButtonImages(): Promise<void> {
+    // Get file paths from Rust
+    const paths = await invoke<(string | null)[]>("get_button_images");
+
+    // Convert file paths to URLs using Tauri's convertFileSrc
+    buttonImages.value = paths.map((path) =>
+      path ? convertFileSrc(path) : null
+    );
   }
 
   /**
@@ -101,9 +122,11 @@ export function useStreamDeck() {
     devices,
     connectedDevice,
     buttonStates,
+    buttonImages,
     listDevices,
     connect,
     disconnect,
+    fetchButtonImages,
     setupButtonListener,
     cleanupButtonListener,
   };

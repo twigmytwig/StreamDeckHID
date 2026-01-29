@@ -41,10 +41,13 @@ pub fn connect_device(device_path: String, state: State<'_, AppState>, app_handl
     let streamdeck = StreamDeck::connect(&device_path)?;
 
     //Lock the mutex, get mutable acces to the Option inside
-    let mut guard = state.streamdeck.lock().unwrap(); 
+    let mut guard = state.streamdeck.lock().unwrap();
     *guard = Some(streamdeck); //the *guard here is accessing the option within which is the streamdeck state
-    
+
     drop(guard); // Release the lock before spawning thread
+
+    // Sync button images to the Stream Deck LCD
+    crate::images::sync_images_to_device(&state, &app_handle);
 
     // Clone the handle for the thread
     let handle = app_handle.clone();
@@ -58,6 +61,8 @@ pub fn connect_device(device_path: String, state: State<'_, AppState>, app_handl
 
 /// Disconnect from the currently connected Stream Deck.
 ///
+/// Clears all button images before disconnecting.
+///
 /// # Frontend Usage
 ///
 /// ```typescript
@@ -66,6 +71,14 @@ pub fn connect_device(device_path: String, state: State<'_, AppState>, app_handl
 #[tauri::command]
 pub fn disconnect_device(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.streamdeck.lock().unwrap();
+
+    // Clear all button images before disconnecting
+    if let Some(ref mut streamdeck) = *guard {
+        if let Err(e) = streamdeck.clear_all_buttons() {
+            eprintln!("Warning: Failed to clear buttons on disconnect: {}", e);
+        }
+    }
+
     *guard = None; //setting the option within (aka stream deck state) to none
     Ok(())
 }
@@ -161,4 +174,39 @@ fn polling_loop(app_handle: AppHandle) {
 
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+/// Get images for all buttons on the current page.
+///
+/// # Returns
+///
+/// An array of 15 Option<String> values. Each is either:
+/// - Some(path) - Absolute file path (frontend converts with convertFileSrc)
+/// - None - No image configured
+///
+/// # Frontend Usage
+///
+/// ```typescript
+/// import { convertFileSrc } from '@tauri-apps/api/core';
+/// const paths = await invoke<(string | null)[]>('get_button_images');
+/// const urls = paths.map(p => p ? convertFileSrc(p) : null);
+/// ```
+#[tauri::command]
+pub fn get_button_images(state: State<'_, AppState>, app_handle: AppHandle) -> Vec<Option<String>> {
+    let config = state.config.lock().unwrap();
+    let mut images: Vec<Option<String>> = vec![None; 15];
+
+    // Get current page
+    if let Some(page) = config.pages.get(config.current_page) {
+        for i in 0..15 {
+            let button_key = i.to_string();
+
+            if let Some(button_config) = page.buttons.get(&button_key) {
+                // Use the images module to resolve the image path
+                images[i] = crate::images::resolve_button_image(button_config, &app_handle);
+            }
+        }
+    }
+
+    images
 }

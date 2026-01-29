@@ -3,7 +3,7 @@
  * StreamDeckGrid.vue
  *
  * Visual representation of the Stream Deck's 5x3 button grid.
- * Each button shows its index (0-14) and highlights when pressed.
+ * Each button shows its image (if available) or index, and highlights when pressed.
  *
  * Button layout (indices):
  * ┌────┬────┬────┬────┬────┐
@@ -18,6 +18,8 @@
 defineProps<{
   /** Array of 15 boolean values representing button press states */
   buttonStates: boolean[];
+  /** Array of 15 image URLs (or null) for each button */
+  buttonImages: (string | null)[];
 }>();
 
 // Grid dimensions for Stream Deck Original/MK.2
@@ -35,7 +37,14 @@ const buttons = Array.from({ length: BUTTON_COUNT }, (_, i) => i);
       class="button"
       :class="{ pressed: buttonStates[index] }"
     >
-      <span class="button-index">{{ index }}</span>
+      <!-- Show image if available, otherwise show button index -->
+      <img
+        v-if="buttonImages[index]"
+        :src="buttonImages[index]!"
+        :alt="`Button ${index}`"
+        class="button-image"
+      />
+      <span v-else class="button-index">{{ index }}</span>
     </div>
   </div>
 </template>
@@ -81,5 +90,17 @@ const buttons = Array.from({ length: BUTTON_COUNT }, (_, i) => i);
 
 .button.pressed .button-index {
   color: white;
+}
+
+.button-image {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.button.pressed .button-image {
+  filter: brightness(1.2);
 }
 </style>

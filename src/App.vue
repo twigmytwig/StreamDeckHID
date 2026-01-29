@@ -7,9 +7,11 @@ const {
   devices,
   connectedDevice,
   buttonStates,
+  buttonImages,
   listDevices,
   connect,
   disconnect,
+  fetchButtonImages,
   setupButtonListener,
   cleanupButtonListener,
 } = useStreamDeck();
@@ -109,7 +111,7 @@ onUnmounted(() => {
     <!-- Stream Deck grid visualization -->
     <section v-if="connectedDevice" class="grid-section">
       <h2>Button Grid</h2>
-      <StreamDeckGrid :button-states="buttonStates" />
+      <StreamDeckGrid :button-states="buttonStates" :button-images="buttonImages" />
     </section>
   </main>
 </template>

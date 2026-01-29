@@ -25,6 +25,21 @@ pub const GRID_COLUMNS: usize = 5;
 /// Number of rows in the button grid
 pub const GRID_ROWS: usize = 3;
 
+/// Button image dimensions (72x72 pixels for Original and MK.2)
+pub const IMAGE_SIZE: u32 = 72;
+
+/// HID output report size for MK.2 (1024 bytes)
+pub const MK2_PACKET_SIZE: usize = 1024;
+
+/// Header size in image packets for MK.2
+pub const MK2_HEADER_SIZE: usize = 8;
+
+/// Maximum image data per packet for MK.2
+pub const MK2_IMAGE_DATA_PER_PACKET: usize = MK2_PACKET_SIZE - MK2_HEADER_SIZE;
+
+/// JPEG quality for encoding button images (0-100)
+pub const JPEG_QUALITY: u8 = 95;
+
 // =============================================================================
 // HID Report Structure Notes (for implementation reference)
 // =============================================================================

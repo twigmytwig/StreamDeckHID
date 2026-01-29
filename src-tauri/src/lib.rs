@@ -8,12 +8,14 @@ mod audio;
 mod commands;
 mod config;
 mod hid;
+mod images;
 
 use std::sync::Mutex;
 use crate::actions::ActionRegistry;
 use crate::config::Config;
 use crate::hid::device::StreamDeck;
-use commands::streamdeck::{connect_device, disconnect_device, get_button_state, list_devices};
+use commands::streamdeck::{connect_device, disconnect_device, get_button_images, get_button_state, list_devices};
+use tauri::Manager;
 
 /// Application state shared across commands
 pub struct AppState {
@@ -34,6 +36,7 @@ pub fn run() {
             connect_device,
             disconnect_device,
             get_button_state,
+            get_button_images,
         ])
         // Manage application state
         .manage(AppState {
@@ -42,6 +45,19 @@ pub fn run() {
         })
         // Manage action registry separately (it doesn't need a Mutex - it's read-only after init)
         .manage(ActionRegistry::new())
+        // Handle cleanup when app exits
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Clear Stream Deck buttons when window closes
+                let state = window.state::<AppState>();
+                let mut guard = state.streamdeck.lock().unwrap();
+                if let Some(ref mut streamdeck) = *guard {
+                    if let Err(e) = streamdeck.clear_all_buttons() {
+                        eprintln!("Warning: Failed to clear buttons on exit: {}", e);
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
