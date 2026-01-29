@@ -3,13 +3,8 @@
 //! This module provides the Tauri command handlers for Stream Deck operations.
 //! These commands are invoked from the TypeScript frontend via `invoke()`.
 
-use std::thread;
-use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 
-use serde_json::json;
-use tauri::{AppHandle, Emitter, Manager, State};
-
-use crate::actions::ActionRegistry;
 use crate::hid::device::{DeviceInfo, StreamDeck};
 use crate::AppState;
 
@@ -49,12 +44,8 @@ pub fn connect_device(device_path: String, state: State<'_, AppState>, app_handl
     // Sync button images to the Stream Deck LCD
     crate::images::sync_images_to_device(&state, &app_handle);
 
-    // Clone the handle for the thread
-    let handle = app_handle.clone();
-
-    thread::spawn(move || {
-        polling_loop(handle);
-    });
+    // Start the button polling loop in a background thread
+    crate::polling::start_polling(app_handle);
 
     Ok(())
 }
@@ -112,70 +103,6 @@ pub fn get_button_state(state: State<'_, AppState>) -> Result<Vec<bool>, String>
     }
 }
 
-fn polling_loop(app_handle: AppHandle) {
-    let mut prev_states = [false; 15];
-
-    loop {
-        // Get access to state and registry through the app handle
-        let state = app_handle.state::<AppState>();
-        let registry = app_handle.state::<ActionRegistry>();
-
-        let mut streamdeck_guard = state.streamdeck.lock().unwrap();
-
-        match &mut *streamdeck_guard {
-            Some(streamdeck) => {
-                if let Ok(buttons) = streamdeck.read_buttons() {
-                    // Check each button for rising edge (just pressed)
-                    for i in 0..15 {
-                        if buttons[i] && !prev_states[i] {
-                            // Button i was just pressed - look up its action
-                            let config_guard = state.config.lock().unwrap();
-
-                            if let Some(page) = config_guard.pages.get(config_guard.current_page) {
-                                if let Some(button_config) = page.buttons.get(&i.to_string()) {
-                                    println!(
-                                        "Button {} pressed - executing: {}",
-                                        i, button_config.action.action_type
-                                    );
-
-                                    // Clone the action so we can release the config lock
-                                    let action = button_config.action.clone();
-                                    drop(config_guard);
-
-                                    // Execute the action via registry
-                                    if let Err(e) = registry.execute(&action, &app_handle) {
-                                        eprintln!("Action error: {}", e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Check if anything changed, then update prev_states and emit event
-                    if buttons != &prev_states {
-                        prev_states = *buttons;
-
-                        // Emit event to frontend
-                        let _ = app_handle.emit(
-                            "streamdeck://button-state",
-                            json!({ "buttons": buttons.to_vec() }),
-                        );
-                    }
-                }
-            }
-            None => {
-                // Device disconnected, exit the loop
-                break;
-            }
-        }
-
-        // Release lock before sleeping!
-        drop(streamdeck_guard);
-
-        thread::sleep(Duration::from_millis(50));
-    }
-}
-
 /// Get images for all buttons on the current page.
 ///
 /// # Returns
@@ -193,20 +120,5 @@ fn polling_loop(app_handle: AppHandle) {
 /// ```
 #[tauri::command]
 pub fn get_button_images(state: State<'_, AppState>, app_handle: AppHandle) -> Vec<Option<String>> {
-    let config = state.config.lock().unwrap();
-    let mut images: Vec<Option<String>> = vec![None; 15];
-
-    // Get current page
-    if let Some(page) = config.pages.get(config.current_page) {
-        for i in 0..15 {
-            let button_key = i.to_string();
-
-            if let Some(button_config) = page.buttons.get(&button_key) {
-                // Use the images module to resolve the image path
-                images[i] = crate::images::resolve_button_image(button_config, &app_handle);
-            }
-        }
-    }
-
-    images
+    crate::images::get_current_page_images(&state, &app_handle)
 }

@@ -9,6 +9,7 @@ mod commands;
 mod config;
 mod hid;
 mod images;
+mod polling;
 
 use std::sync::Mutex;
 use crate::actions::ActionRegistry;

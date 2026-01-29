@@ -22,8 +22,8 @@ pub struct Config {
 pub struct Page {
     /// Display name for this page
     pub name: String,
-    /// Button configurations, keyed by button index ("0" through "14")
-    pub buttons: HashMap<String, ButtonConfig>,
+    /// Button configurations, keyed by button index (0 through 14)
+    pub buttons: HashMap<usize, ButtonConfig>,
 }
 
 /// Configuration for a single button
@@ -124,7 +124,7 @@ impl Default for Config {
         let mut buttons = HashMap::new();
 
         buttons.insert(
-            "0".to_string(),
+            0,
             ButtonConfig {
                 action: Action::new("audio.volume_up"),
                 label: Some("Vol +".to_string()),
@@ -133,7 +133,7 @@ impl Default for Config {
         );
 
         buttons.insert(
-            "1".to_string(),
+            1,
             ButtonConfig {
                 action: Action::new("audio.volume_down"),
                 label: Some("Vol -".to_string()),

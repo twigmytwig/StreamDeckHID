@@ -10,6 +10,7 @@
 //! - Generated text images (TODO)
 
 use crate::config::{ButtonConfig, ButtonImage};
+use crate::hid::constants::BUTTON_COUNT;
 use crate::AppState;
 use tauri::{AppHandle, Manager, State};
 
@@ -77,40 +78,47 @@ fn resolve_builtin_icon(icon_name: &str, app_handle: &AppHandle) -> Option<Strin
     None
 }
 
+/// Get all button image paths for the current page.
+///
+/// Returns a Vec of Option<String> where each index corresponds to a button.
+/// This is the shared logic used by both the frontend (get_button_images command)
+/// and the device sync (sync_images_to_device).
+pub fn get_current_page_images(state: &State<'_, AppState>, app_handle: &AppHandle) -> Vec<Option<String>> {
+    let config = state.config.lock().unwrap();
+    let mut images: Vec<Option<String>> = vec![None; BUTTON_COUNT];
+
+    if let Some(page) = config.pages.get(config.current_page) {
+        for i in 0..BUTTON_COUNT {
+            if let Some(button_config) = page.buttons.get(&i) {
+                images[i] = resolve_button_image(button_config, app_handle);
+            }
+        }
+    }
+
+    images
+}
+
 /// Sync button images to the physical Stream Deck LCD.
 ///
 /// This resolves images for all configured buttons on the current page
 /// and sends them to the device.
 pub fn sync_images_to_device(state: &State<'_, AppState>, app_handle: &AppHandle) {
-    let config = state.config.lock().unwrap();
+    // Get all image paths
+    let images = get_current_page_images(state, app_handle);
 
-    // Get current page
-    let page = match config.pages.get(config.current_page) {
-        Some(p) => p,
-        None => return,
-    };
+    // Collect paths with their indices (filtering out None values)
+    let image_paths: Vec<(usize, &String)> = images
+        .iter()
+        .enumerate()
+        .filter_map(|(i, opt)| opt.as_ref().map(|path| (i, path)))
+        .collect();
 
-    // Collect image paths first, then release config lock
-    let mut image_paths: Vec<(usize, String)> = Vec::new();
-
-    for i in 0..15 {
-        let button_key = i.to_string();
-
-        if let Some(button_config) = page.buttons.get(&button_key) {
-            if let Some(path) = resolve_button_image(button_config, app_handle) {
-                image_paths.push((i, path));
-            }
-        }
-    }
-
-    drop(config); // Release config lock before acquiring streamdeck lock
-
-    // Now send images to the device
+    // Send images to the device
     let mut streamdeck_guard = state.streamdeck.lock().unwrap();
 
     if let Some(ref mut streamdeck) = *streamdeck_guard {
         for (button_index, path) in image_paths {
-            if let Err(e) = streamdeck.set_button_image(button_index, &path) {
+            if let Err(e) = streamdeck.set_button_image(button_index, path) {
                 eprintln!("Failed to set image for button {}: {}", button_index, e);
             } else {
                 println!("Set image for button {}: {}", button_index, path);
