@@ -32,3 +32,16 @@ pub fn volume_down() -> Result<(), String> {
         .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
     Ok(())
 }
+
+/// mute the system volume
+pub fn volume_mute() -> Result<(), String>{
+    // [char]173 is the volume mute key scan code in powershell
+    Command::new("powershell")
+        .args([
+            "-Command",
+            "(New-Object -ComObject WScript.Shell).SendKeys([char]173)"
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
+    Ok(())
+}

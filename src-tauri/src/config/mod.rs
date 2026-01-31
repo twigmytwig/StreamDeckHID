@@ -141,6 +141,15 @@ impl Default for Config {
             },
         );
 
+        buttons.insert(
+            2,
+            ButtonConfig {
+                action: Action::new("audio.volume_mute"),
+                label: Some("Vol 0".to_string()),
+                image: None,
+            },
+        );
+
         Config {
             version: 1,
             current_page: 0,

@@ -21,9 +21,7 @@ pub fn audio_volume_down(_action: &Action, _app: &AppHandle) -> Result<(), Strin
 }
 
 pub fn audio_volume_mute(_action: &Action, _app: &AppHandle) -> Result<(), String> {
-    // TODO: Implement mute toggle
-    eprintln!("Mute not yet implemented");
-    Ok(())
+    crate::audio::volume_mute()
 }
 
 pub fn audio_play_sound(action: &Action, _app: &AppHandle) -> Result<(), String> {
