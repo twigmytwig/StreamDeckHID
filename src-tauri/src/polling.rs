@@ -34,57 +34,56 @@ fn polling_loop(app_handle: AppHandle) {
         let state = app_handle.state::<AppState>();
         let registry = app_handle.state::<ActionRegistry>();
 
-        let mut streamdeck_guard = state.streamdeck.lock().unwrap();
+        // Read buttons with lock held, then release before processing
+        let button_result = {
+            let mut streamdeck_guard = state.streamdeck.lock().unwrap();
+            match &mut *streamdeck_guard {
+                Some(streamdeck) => streamdeck.read_buttons().ok().copied(),
+                None => None,
+            }
+        };
 
-        match &mut *streamdeck_guard {
-            Some(streamdeck) => {
-                if let Ok(buttons) = streamdeck.read_buttons() {
-                    // Check each button for rising edge (just pressed)
-                    for i in 0..BUTTON_COUNT {
-                        if buttons[i] && !prev_states[i] {
-                            // Button i was just pressed - look up its action
-                            let config_guard = state.config.lock().unwrap();
+        let Some(buttons) = button_result else {
+            // Device disconnected
+            break;
+        };
 
-                            if let Some(page) = config_guard.pages.get(config_guard.current_page) {
-                                if let Some(button_config) = page.buttons.get(&i) {
-                                    println!(
-                                        "Button {} pressed - executing: {}",
-                                        i, button_config.action.action_type
-                                    );
+        // Process button presses (no streamdeck lock held)
+        for i in 0..BUTTON_COUNT {
+            if buttons[i] && !prev_states[i] {
+                // Button i was just pressed - look up its action
+                let config_guard = state.config.lock().unwrap();
 
-                                    // Clone the action so we can release the config lock
-                                    let action = button_config.action.clone();
-                                    drop(config_guard);
-
-                                    // Execute the action via registry
-                                    if let Err(e) = registry.execute(&action, &app_handle) {
-                                        eprintln!("Action error: {}", e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Check if anything changed, then update prev_states and emit event
-                    if buttons != &prev_states {
-                        prev_states = *buttons;
-
-                        // Emit event to frontend
-                        let _ = app_handle.emit(
-                            "streamdeck://button-state",
-                            json!({ "buttons": buttons.to_vec() }),
+                if let Some(page) = config_guard.pages.get(config_guard.current_page) {
+                    if let Some(button_config) = page.buttons.get(&i) {
+                        println!(
+                            "Button {} pressed - executing: {}",
+                            i, button_config.action.action_type
                         );
+
+                        // Clone the action so we can release the config lock
+                        let action = button_config.action.clone();
+                        drop(config_guard);
+
+                        // Execute the action via registry
+                        if let Err(e) = registry.execute(&action, &app_handle) {
+                            eprintln!("Action error: {}", e);
+                        }
                     }
                 }
             }
-            None => {
-                // Device disconnected, exit the loop
-                break;
-            }
         }
 
-        // Release lock before sleeping!
-        drop(streamdeck_guard);
+        // Check if anything changed, then update prev_states and emit event
+        if buttons != prev_states {
+            prev_states = buttons;
+
+            // Emit event to frontend
+            let _ = app_handle.emit(
+                "streamdeck://button-state",
+                json!({ "buttons": buttons.to_vec() }),
+            );
+        }
 
         thread::sleep(Duration::from_millis(50));
     }

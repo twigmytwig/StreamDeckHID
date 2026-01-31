@@ -73,6 +73,9 @@ impl ActionRegistry {
         self.register("system.open_url", handlers::system_open_url);
         self.register("system.hotkey", handlers::system_hotkey);
 
+        // Weather actions
+        self.register("weather.display", handlers::display_weather);
+
         // Special actions
         self.register("none", handlers::action_none);
     }

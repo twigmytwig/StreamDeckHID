@@ -133,6 +133,44 @@ pub fn system_hotkey(action: &Action, _app: &AppHandle) -> Result<(), String> {
 }
 
 // =============================================================================
+// Weather Actions
+// =============================================================================
+pub fn display_weather(_action: &Action, app: &AppHandle) -> Result<(), String> {
+    // TODO: Get button index from action params instead of hardcoding
+    const WEATHER_BUTTON_INDEX: usize = 3;
+
+    // Clone app handle for the spawned thread
+    let app_handle = app.clone();
+
+    // Spawn thread so we don't block the polling loop
+    std::thread::spawn(move || {
+        match crate::weather::get_weather() {
+            Some(weather) => {
+                println!("Weather: {}", weather);
+
+                // Update the button label with weather data
+                let state = app_handle.state::<AppState>();
+                {
+                    let mut config = state.config.lock().unwrap();
+                    let current_page = config.current_page;
+                    if let Some(page) = config.pages.get_mut(current_page) {
+                        if let Some(button) = page.buttons.get_mut(&WEATHER_BUTTON_INDEX) {
+                            button.label = Some(weather);
+                        }
+                    }
+                }
+
+                // Re-sync images to update the display
+                crate::images::sync_images_to_device(&app_handle.state(), &app_handle);
+            }
+            None => eprintln!("Failed to fetch weather"),
+        }
+    });
+
+    Ok(())
+}
+
+// =============================================================================
 // Special Actions
 // =============================================================================
 

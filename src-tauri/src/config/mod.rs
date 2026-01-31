@@ -151,6 +151,15 @@ impl Default for Config {
         );
 
         buttons.insert(
+            3,
+            ButtonConfig {
+                action: Action::new("weather.display"),
+                label: Some("Weather".to_string()),
+                image: None,
+            },
+        );
+
+        buttons.insert(
             13,
             ButtonConfig {
                 action: Action::new("navigation.previous_page"),

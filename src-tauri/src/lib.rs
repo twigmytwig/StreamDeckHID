@@ -10,6 +10,7 @@ mod config;
 mod hid;
 mod images;
 mod polling;
+mod weather;
 
 use std::sync::Mutex;
 use crate::actions::ActionRegistry;
