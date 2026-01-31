@@ -8,7 +8,10 @@
 //! - Custom user images (file paths)
 //! - Built-in icons (bundled with app)
 //! - Generated text images (TODO)
-
+//! 
+use imageproc::drawing::draw_text_mut;
+use image::{Rgb, RgbImage};
+use ab_glyph::{FontArc, PxScale};
 use crate::config::{ButtonConfig, ButtonImage};
 use crate::hid::constants::BUTTON_COUNT;
 use crate::AppState;
@@ -26,13 +29,21 @@ pub fn resolve_button_image(button_config: &ButtonConfig, app_handle: &AppHandle
     if let Some(ref image) = button_config.image {
         return resolve_custom_image(image, app_handle);
     }
-
-    // System default second
+    
+    println!("No custom image for this button");
+    // System default second - only return if icon is actually found
     if let Some(icon_name) = button_config.action.default_icon() {
-        return resolve_builtin_icon(icon_name, app_handle);
+        if let Some(path) = resolve_builtin_icon(icon_name, app_handle) {
+            return Some(path);
+        }
     }
 
-    None // no image womp womp
+    println!("No icon found, checking for a label.");
+    if let Some(ref label_name) = button_config.label{
+        return generate_text_image(label_name, app_handle);
+    }
+    println!("No image, no label");
+    None // no image or label womp womp
 }
 
 /// Resolve a custom image to an absolute file path
@@ -125,4 +136,86 @@ pub fn sync_images_to_device(state: &State<'_, AppState>, app_handle: &AppHandle
             }
         }
     }
+}
+
+pub fn generate_text_image(label: &String, app_handle: &AppHandle) -> Option<String>{
+    println!("[generate_text_image] Starting for label: '{}'", label);
+
+    // THIS IS PROBABLY NOT A GREAT WAY TO DO THIS
+    //Create a blank canvas
+    // draw white text on it
+    // save it to a temp file or cache
+    // return file path
+
+    //72x72 black image
+    let mut image = RgbImage::from_pixel(72, 72, Rgb([0u8, 0u8, 0u8]));
+    println!("[generate_text_image] Created 72x72 black image");
+
+    //load a font (basic windows font) TODO: SHip app with font for cross platform
+    let font_path = "C:\\Windows\\Fonts\\arial.ttf";
+    println!("[generate_text_image] Attempting to load font from: {}", font_path);
+    let font_data = match std::fs::read(font_path) {
+        Ok(data) => {
+            println!("[generate_text_image] Font loaded, {} bytes", data.len());
+            data
+        }
+        Err(e) => {
+            println!("[generate_text_image] FAILED to load font: {}", e);
+            return None;
+        }
+    };
+
+    let font = match FontArc::try_from_vec(font_data) {
+        Ok(f) => {
+            println!("[generate_text_image] Font parsed successfully");
+            f
+        }
+        Err(e) => {
+            println!("[generate_text_image] FAILED to parse font: {}", e);
+            return None;
+        }
+    };
+
+    // Set text size and color
+    let scale = PxScale::from(20.0);
+    let white = Rgb([255u8, 255u8, 255u8]);
+
+    // Draw the text (centered-ish)
+    draw_text_mut(&mut image, white, 10, 25, scale, &font, label);
+    println!("[generate_text_image] Text drawn on image");
+
+    // Save to cache directory
+    let cache_dir = match app_handle.path().app_cache_dir() {
+        Ok(dir) => {
+            println!("[generate_text_image] Cache dir: {:?}", dir);
+            dir
+        }
+        Err(e) => {
+            println!("[generate_text_image] FAILED to get cache dir: {}", e);
+            return None;
+        }
+    };
+
+    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
+        println!("[generate_text_image] FAILED to create cache dir: {}", e);
+        return None;
+    }
+    println!("[generate_text_image] Cache dir exists/created");
+
+    // Create filename from label (sanitized)
+    let safe_name: String = label.chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    let file_path = cache_dir.join(format!("{}.png", safe_name));
+    println!("[generate_text_image] Will save to: {:?}", file_path);
+
+    // Save the image
+    if let Err(e) = image.save(&file_path) {
+        println!("[generate_text_image] FAILED to save image: {}", e);
+        return None;
+    }
+
+    let result = file_path.to_string_lossy().to_string();
+    println!("[generate_text_image] SUCCESS! Returning: {}", result);
+    Some(result)
 }
