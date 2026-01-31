@@ -202,11 +202,13 @@ pub fn generate_text_image(label: &String, app_handle: &AppHandle) -> Option<Str
     }
     println!("[generate_text_image] Cache dir exists/created");
 
-    // Create filename from label (sanitized)
-    let safe_name: String = label.chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect();
-    let file_path = cache_dir.join(format!("{}.png", safe_name));
+    // Create filename from label (use hash to ensure uniqueness)
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    label.hash(&mut hasher);
+    let hash = hasher.finish();
+    let file_path = cache_dir.join(format!("text_{:x}.png", hash));
     println!("[generate_text_image] Will save to: {:?}", file_path);
 
     // Save the image

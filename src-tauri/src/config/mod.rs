@@ -150,6 +150,25 @@ impl Default for Config {
             },
         );
 
+        buttons.insert(
+            13,
+            ButtonConfig {
+                action: Action::new("navigation.previous_page"),
+                label: Some("<==".to_string()),
+                image: None,
+            },
+        );
+
+        buttons.insert(
+            14,
+            ButtonConfig {
+                action: Action::new("navigation.next_page"),
+                label: Some("==>".to_string()),
+                image: None,
+            },
+        );
+
+
         Config {
             version: 1,
             current_page: 0,
